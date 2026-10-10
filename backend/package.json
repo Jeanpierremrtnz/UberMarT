@@ -1,0 +1,38 @@
+{
+  "name": "ubermart-backend",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "description": "API y tiempo real de UberMarT (transporte en moto - Manta, Ecuador)",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --env-file=.env --watch src/server.js",
+    "migrate": "node src/migrate.js",
+    "gen:secrets": "node scripts/gen-secrets.js",
+    "admin:create": "node scripts/create-admin.js",
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "test:unit": "node --test \"test/unit/*.test.js\"",
+    "audit": "npm audit --omit=dev"
+  },
+  "dependencies": {
+    "argon2": "0.45.1",
+    "express": "5.3.0",
+    "express-rate-limit": "8.7.1",
+    "helmet": "8.3.0",
+    "jose": "6.2.12",
+    "multer": "2.4.0",
+    "pg": "8.23.1",
+    "pino": "10.4.0",
+    "sharp": "0.35.5",
+    "socket.io": "4.8.4",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "socket.io-client": "4.8.4"
+  }
+}
