@@ -1,0 +1,101 @@
+# Despliegue en un solo servidor (DigitalOcean Droplet / AWS Lightsail).
+#   cd infra && cp .env.example .env && (editar) && docker compose up -d --build
+#   docker compose run --rm migrate
+# Solo Caddy expone puertos (80/443). PostgreSQL y OSRM quedan en una red interna.
+
+name: ubermart
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ubermart
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD}
+      OWNER_DB_PASSWORD: ${OWNER_DB_PASSWORD:?define OWNER_DB_PASSWORD}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?define APP_DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ubermart"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    shm_size: 256mb
+
+  # Ejecutar manualmente en cada despliegue: docker compose run --rm migrate
+  migrate:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    profiles: [tools]
+    command: ["node", "src/migrate.js"]
+    environment:
+      MIGRATIONS_DATABASE_URL: postgres://ubermart_owner:${OWNER_DB_PASSWORD}@db:5432/ubermart
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [internal]
+
+  api:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file: ./api.env
+    environment:
+      DATABASE_URL: postgres://ubermart_app:${APP_DB_PASSWORD}@db:5432/ubermart
+      STORAGE_DIR: /data/storage
+      OSRM_URL: http://osrm:5000
+    volumes:
+      - storage:/data/storage
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [internal, web]
+    deploy:
+      resources:
+        limits: { memory: 512m }
+
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend:v5.27.1
+    restart: unless-stopped
+    command: ["osrm-routed", "--algorithm", "mld", "--max-table-size", "100", "/data/manabi.osrm"]
+    volumes:
+      - ./osrm/data:/data:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [internal]
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?define API_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?define ACME_EMAIL}
+      ADMIN_ALLOWED_IPS: ${ADMIN_ALLOWED_IPS:-0.0.0.0/0 ::/0}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [web]
+
+networks:
+  internal:
+    internal: true
+  web: {}
+
+volumes:
+  pgdata: {}
+  storage: {}
+  caddy_data: {}
+  caddy_config: {}
