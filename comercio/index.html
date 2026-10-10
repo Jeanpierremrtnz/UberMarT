@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>UberMarT · Comercios</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/panel.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <!-- Ingreso -->
+  <section id="login-view" class="login" hidden>
+    <form id="login-form" class="login-card" autocomplete="on">
+      <h1>UberMarT <span>Comercios</span></h1>
+      <p class="muted">Panel para restaurantes y locales: recibe pedidos y administra tus productos.</p>
+      <label>Correo <input name="email" type="email" required autocomplete="username"></label>
+      <label>Contraseña <input name="password" type="password" required autocomplete="current-password"></label>
+      <label>Código del autenticador (6 dígitos)
+        <input name="totp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code">
+      </label>
+      <button type="submit" class="btn primary">Ingresar</button>
+      <p id="login-error" class="error" role="alert"></p>
+      <p>¿Tienes un restaurante o local en Manta? <a href="#registro" id="go-register">Registra tu negocio</a></p>
+    </form>
+  </section>
+
+  <!-- Registro autogestionado -->
+  <section id="register-view" class="login" hidden>
+    <div class="login-card wide-card">
+      <h1>Registra tu negocio</h1>
+      <ol class="steps"><li data-step="1">Celular</li><li data-step="2">Negocio</li><li data-step="3">Dueño</li><li data-step="4">Autenticador</li></ol>
+
+      <form id="reg-step-1" class="reg-step">
+        <p class="muted">Verificaremos tu celular con un código SMS.</p>
+        <label>Celular del dueño <input name="phone" inputmode="tel" placeholder="0991234567" required maxlength="14"></label>
+        <button class="btn primary" type="submit">Enviar código</button>
+        <label id="otp-label" hidden>Código recibido por SMS <input name="code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}"></label>
+        <button id="otp-continue" class="btn" type="button" hidden>Continuar</button>
+      </form>
+
+      <form id="reg-step-2" class="reg-step" hidden>
+        <label>Nombre comercial <input name="name" required minlength="2" maxlength="80"></label>
+        <label>Tipo de negocio
+          <select name="category" required>
+            <option value="restaurante">Restaurante</option>
+            <option value="comida_rapida">Comida rápida</option>
+            <option value="cafeteria">Cafetería</option>
+            <option value="panaderia">Panadería</option>
+            <option value="farmacia">Farmacia</option>
+            <option value="tienda">Tienda</option>
+            <option value="otro">Otro</option>
+          </select>
+        </label>
+        <label>RUC (13 dígitos) <input name="ruc" inputmode="numeric" pattern="[0-9]{13}" maxlength="13" required></label>
+        <label>Dirección <input name="addressLabel" required minlength="5" maxlength="160" placeholder="Av. Flavio Reyes y calle 20"></label>
+        <div class="row">
+          <label>Latitud <input name="lat" type="number" step="any" required></label>
+          <label>Longitud <input name="lng" type="number" step="any" required></label>
+        </div>
+        <button id="use-location" class="btn small" type="button">Usar mi ubicación actual (estando en el local)</button>
+        <p class="muted small-text">También puedes copiar las coordenadas desde Google Maps (mantén presionado sobre tu local).</p>
+        <label>Horario (opcional) <input name="scheduleText" maxlength="120" placeholder="Lun-Dom 11:00-22:00"></label>
+        <button class="btn primary" type="submit">Continuar</button>
+      </form>
+
+      <form id="reg-step-3" class="reg-step" hidden>
+        <label>Nombres y apellidos del dueño <input name="fullName" required minlength="3" maxlength="120"></label>
+        <label>Cédula del dueño <input name="cedula" inputmode="numeric" pattern="[0-9]{10}" maxlength="10" required></label>
+        <label>Correo (será tu usuario) <input name="email" type="email" required maxlength="254"></label>
+        <label>Contraseña (12+ caracteres, mayúsculas, minúsculas y números) <input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>
+        <label>Repite la contraseña <input name="password2" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>
+        <label class="check"><input type="checkbox" name="terms" required> Acepto los términos para comercios y el tratamiento de datos (LOPDP).</label>
+        <button class="btn primary" type="submit">Crear cuenta</button>
+      </form>
+
+      <div id="reg-step-4" class="reg-step" hidden>
+        <p><strong>¡Cuenta creada!</strong> Por seguridad, cada ingreso pide un código de una app autenticadora.</p>
+        <ol>
+          <li>Instala <strong>Google Authenticator</strong> o <strong>Authy</strong> en tu celular.</li>
+          <li>Agrega una cuenta con esta clave (o abre el enlace desde tu celular):</li>
+        </ol>
+        <p class="secret mono" id="totp-secret"></p>
+        <p><a id="totp-link" class="btn small" href="#">Abrir en la app autenticadora</a></p>
+        <p class="flag warn">Guarda esta clave en un lugar seguro: no se volverá a mostrar.</p>
+        <button id="go-login" class="btn primary" type="button">Ya la agregué, ir a ingresar</button>
+      </div>
+
+      <p id="reg-error" class="error" role="alert"></p>
+      <p><a href="#" id="back-login">Volver a ingresar</a></p>
+    </div>
+  </section>
+
+  <!-- Panel del local -->
+  <div id="app-view" hidden>
+    <header class="topbar">
+      <strong id="store-name">Mi local</strong>
+      <nav id="tabs">
+        <button data-tab="orders" class="tab">Pedidos <span id="badge-orders" class="badge danger"></span></button>
+        <button data-tab="menu" class="tab">Productos</button>
+        <button data-tab="store" class="tab">Mi local</button>
+        <button data-tab="account" class="tab">Cuenta</button>
+      </nav>
+      <label class="switch"><input type="checkbox" id="open-toggle"> <span id="open-label">Cerrado</span></label>
+      <button id="logout" class="btn small">Salir</button>
+    </header>
+    <div id="status-banner" class="flag" hidden></div>
+
+    <main>
+      <section id="tab-orders" class="tab-panel">
+        <div class="toolbar">
+          <h2>Pedidos</h2>
+          <select id="orders-scope"><option value="active">En curso</option><option value="history">Historial</option></select>
+        </div>
+        <div id="orders-list" class="cards"></div>
+      </section>
+
+      <section id="tab-menu" class="tab-panel" hidden>
+        <div class="toolbar"><h2>Productos</h2></div>
+        <form id="item-form" class="card fields-inline">
+          <h3 id="item-form-title">Agregar producto</h3>
+          <input type="hidden" name="id">
+          <label>Categoría <input name="category" maxlength="40" placeholder="Platos, Bebidas…" value="General" required></label>
+          <label>Nombre <input name="name" maxlength="80" required></label>
+          <label>Precio (USD) <input name="price" inputmode="decimal" placeholder="3.50" required pattern="[0-9]+([.,][0-9]{1,2})?"></label>
+          <label class="span2">Descripción <input name="description" maxlength="300"></label>
+          <label class="check"><input type="checkbox" name="isAvailable" checked> Disponible</label>
+          <div class="row"><button class="btn primary small" type="submit">Guardar</button><button id="item-cancel" class="btn small" type="button" hidden>Cancelar edición</button></div>
+          <p id="item-msg" class="error"></p>
+        </form>
+        <div id="menu-list" class="menu-grid"></div>
+      </section>
+
+      <section id="tab-store" class="tab-panel" hidden>
+        <div class="grid2">
+          <form id="store-form" class="card">
+            <h3>Datos del negocio</h3>
+            <div class="fields">
+              <label>Nombre comercial <input name="name" maxlength="80"></label>
+              <label>Dirección <input name="addressLabel" maxlength="160"></label>
+              <label>Latitud <input name="lat" type="number" step="any"></label>
+              <label>Longitud <input name="lng" type="number" step="any"></label>
+              <label>Horario <input name="scheduleText" maxlength="120"></label>
+              <label>Tiempo de preparación (min) <input name="prepMinutes" type="number" min="1" max="120"></label>
+            </div>
+            <p id="store-locked" class="muted" hidden>Nombre y ubicación verificados: para cambiarlos contacta a soporte.</p>
+            <button class="btn primary small" type="submit">Guardar</button>
+            <span class="muted" data-result></span>
+          </form>
+          <div class="card">
+            <h3>Documentos para la verificación</h3>
+            <p class="muted">Fotos nítidas. Se guardan cifradas y solo las ve el equipo de verificación.</p>
+            <ul id="docs-list" class="list"></ul>
+            <button id="submit-review" class="btn primary">Enviar a revisión</button>
+            <p id="submit-msg" class="error"></p>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-account" class="tab-panel" hidden>
+        <h2>Cuenta con UberMarT</h2>
+        <p class="muted">Comisión por pedido entregado sobre el valor de los productos. Saldo positivo = valor a pagar a UberMarT.</p>
+        <p class="amount" id="owed"></p>
+        <table class="table"><thead><tr><th>Fecha</th><th>Concepto</th><th>Valor</th></tr></thead><tbody id="ledger-body"></tbody></table>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

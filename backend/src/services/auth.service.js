@@ -64,7 +64,7 @@ export function createAuthService({ db, config, keys, sms, audit }) {
       );
     },
 
-    async requestOtp({ phone, ip }) {
+    async requestOtp({ phone, ip, purpose = 'login' }) {
       const normalized = normalizeEcMobile(phone);
       if (!normalized) throw badRequest('PHONE_INVALID', 'Ingresa un número de celular ecuatoriano válido');
       const counts = await db.one(
@@ -78,18 +78,45 @@ export function createAuthService({ db, config, keys, sms, audit }) {
       const id = randomUUID();
       const code = randomDigits(6);
       await db.query(
-        `INSERT INTO otp_challenges (id, phone, code_hash, ip, expires_at)
-         VALUES ($1, $2, $3, $4, now() + make_interval(secs => $5))`,
-        [id, normalized, hmac(keys.otp, `${id}:${code}`), ip, OTP_TTL_SEC],
+        `INSERT INTO otp_challenges (id, phone, code_hash, ip, expires_at, purpose)
+         VALUES ($1, $2, $3, $4, now() + make_interval(secs => $5), $6)`,
+        [id, normalized, hmac(keys.otp, `${id}:${code}`), ip, OTP_TTL_SEC, purpose],
       );
-      await sms.send(normalized, `UberMarT: tu codigo es ${code}. No lo compartas con nadie. Vence en 5 minutos.`);
+      const what = purpose === 'merchant_signup' ? 'para registrar tu local' : '';
+      await sms.send(normalized, `UberMarT: tu codigo ${what ? `${what} ` : ''}es ${code}. No lo compartas con nadie. Vence en 5 minutos.`);
       return { challengeId: id, expiresInSec: OTP_TTL_SEC };
+    },
+
+    /**
+     * Verifica un código sin consumirlo (registro de locales). Los intentos
+     * fallidos se guardan aunque el resto del registro falle después.
+     */
+    async checkOtp({ challengeId, code, purpose }) {
+      const outcome = await db.tx(async (c) => {
+        const { rows } = await c.query(
+          `SELECT id, phone, code_hash, attempts, consumed_at, expires_at < now() AS expired
+             FROM otp_challenges WHERE id = $1 AND purpose = $2 FOR UPDATE`,
+          [challengeId, purpose],
+        );
+        const ch = rows[0];
+        if (!ch || ch.consumed_at || ch.expired) return { error: 'invalid' };
+        if (ch.attempts >= OTP_MAX_ATTEMPTS) return { error: 'locked' };
+        if (!safeEqual(hmac(keys.otp, `${ch.id}:${code}`), ch.code_hash)) {
+          await c.query('UPDATE otp_challenges SET attempts = attempts + 1 WHERE id = $1', [ch.id]);
+          return { error: 'invalid' };
+        }
+        return { phone: ch.phone };
+      });
+      if (outcome.error === 'invalid') throw new HttpError(401, 'OTP_INVALID', 'Código incorrecto o vencido');
+      if (outcome.error === 'locked') throw tooMany('Demasiados intentos. Solicita un código nuevo.');
+      return outcome.phone;
     },
 
     async verifyOtp({ challengeId, code, deviceId, ip }) {
       const outcome = await db.tx(async (c) => {
         const { rows } = await c.query(
-          'SELECT id, phone, code_hash, attempts, consumed_at, expires_at < now() AS expired FROM otp_challenges WHERE id = $1 FOR UPDATE',
+          `SELECT id, phone, code_hash, attempts, consumed_at, expires_at < now() AS expired
+             FROM otp_challenges WHERE id = $1 AND purpose = 'login' FOR UPDATE`,
           [challengeId],
         );
         const ch = rows[0];

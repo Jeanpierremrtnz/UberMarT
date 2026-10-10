@@ -70,3 +70,21 @@ export const BANKS = Object.freeze({
   jep: 'Cooperativa JEP',
   otro: 'Otro',
 });
+
+/**
+ * RUC ecuatoriano (13 dígitos). Persona natural: cédula válida + establecimiento
+ * (001..). Sociedades privadas (tercer dígito 9) y entidades públicas (6): se
+ * valida la estructura; el número exacto se confirma con el certificado del SRI
+ * durante la revisión del panel.
+ */
+export function isValidRuc(value) {
+  const r = String(value ?? '').trim();
+  if (!/^[0-9]{13}$/.test(r)) return false;
+  const province = Number(r.slice(0, 2));
+  if (!((province >= 1 && province <= 24) || province === 30)) return false;
+  const third = Number(r[2]);
+  if (third < 6) return isValidCedula(r.slice(0, 10)) && r.slice(10) !== '000';
+  if (third === 9) return r.slice(10) !== '000';
+  if (third === 6) return r.slice(9) !== '0000';
+  return false;
+}

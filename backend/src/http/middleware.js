@@ -8,6 +8,8 @@ import { hasPermission } from '../services/admin-auth.service.js';
 
 export const ADMIN_COOKIE_SECURE = '__Host-umt_admin';
 export const ADMIN_COOKIE_DEV = 'umt_admin';
+export const MERCHANT_COOKIE_SECURE = '__Host-umt_comercio';
+export const MERCHANT_COOKIE_DEV = 'umt_comercio';
 
 export function parseCookies(header) {
   const out = {};
@@ -91,6 +93,22 @@ export function requireAdmin(adminAuth, cookieName, permission) {
     if (permission && !hasPermission(admin.role, permission)) throw forbidden('Tu rol no tiene acceso a esta acción');
     req.admin = admin;
     req.adminToken = token;
+    next();
+  };
+}
+
+/** Sesión del panel de locales: solo cuentas de rol 'merchant', limitadas a su propio local. */
+export function requireMerchant(adminAuth, cookieName) {
+  return async (req, _res, next) => {
+    const token = parseCookies(req.get('cookie'))[cookieName];
+    const user = await adminAuth.authenticate(token, 'merchant');
+    if (!user) throw unauthorized('Sesión vencida, ingresa de nuevo');
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !safeEqual(req.get('x-csrf-token'), user.csrfToken)) {
+      throw forbidden('Token CSRF inválido');
+    }
+    req.merchantUser = user;
+    req.merchantId = user.merchantId;
+    req.merchantToken = token;
     next();
   };
 }

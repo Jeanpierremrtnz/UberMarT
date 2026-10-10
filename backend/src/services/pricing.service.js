@@ -78,14 +78,35 @@ export function createPricingService({ db, settings, weather, routing }) {
       rulesCache = { at: 0, rules: [] };
     },
 
-    async quote({ passengerId, origin, destination, originLabel, destinationLabel, now = new Date() }) {
+    /**
+     * Cotiza un servicio: 'ride' (pasajero), 'parcel' (mensajería) o 'food'
+     * (delivery). `payload` guarda los datos ya validados del paquete o del
+     * carrito junto a la cotización, para que no puedan alterarse después.
+     */
+    async quote({ passengerId, origin, destination, originLabel, destinationLabel, service = 'ride', payload = null, now = new Date() }) {
       if (!inBbox(origin) || !inBbox(destination)) throw unprocessable('OUT_OF_SERVICE_AREA', 'Ubicación fuera del área de servicio');
       const zone = await zoneAt(origin);
       if (!zone) throw unprocessable('OUT_OF_SERVICE_AREA', 'Aún no tenemos servicio en ese punto de recogida');
-      const pricing = await settings.get('pricing');
+      const base = await settings.get('pricing');
+      let pricing = base;
+      let serviceCfg = null;
+      if (service !== 'ride') {
+        serviceCfg = (await settings.get('services'))[service];
+        if (!serviceCfg?.enabled) throw unprocessable('SERVICE_DISABLED', 'Este servicio no está disponible por ahora');
+        pricing = {
+          ...base,
+          baseCents: serviceCfg.baseCents,
+          perKmCents: serviceCfg.perKmCents,
+          perMinCents: serviceCfg.perMinCents,
+          minFareCents: serviceCfg.minFareCents,
+        };
+      }
       const route = await routing.route(origin, destination);
       if (route.distanceM < pricing.minTripMeters) throw unprocessable('TRIP_TOO_SHORT', 'El destino está demasiado cerca');
       if (route.distanceM > pricing.maxTripMeters) throw unprocessable('TRIP_TOO_LONG', 'El destino supera la distancia máxima permitida');
+      if (service === 'food' && route.distanceM > serviceCfg.maxDistanceMeters) {
+        throw unprocessable('TOO_FAR', 'Tu dirección está fuera del radio de entrega de este local');
+      }
       const durationS = Math.max(60, Math.round(route.durationS * pricing.durationFactor));
 
       const [surge, rules, weatherNow, supply] = await Promise.all([
@@ -106,15 +127,17 @@ export function createPricingService({ db, settings, weather, routing }) {
       const breakdown = { ...fare.breakdown, timeRule: timeRule.rule, routeSource: route.source };
       const q = await db.one(
         `INSERT INTO fare_quotes (passenger_id, origin, destination, origin_label, destination_label, zone_id,
-                                  distance_m, duration_s, breakdown, total_cents, expires_at)
+                                  distance_m, duration_s, breakdown, total_cents, expires_at, service, payload)
          VALUES ($1, ${pointSql('$2', '$3')}::geography, ${pointSql('$4', '$5')}::geography, $6, $7, $8, $9, $10, $11, $12,
-                 now() + make_interval(secs => $13))
+                 now() + make_interval(secs => $13), $14, $15)
          RETURNING id, expires_at`,
         [passengerId, origin.lat, origin.lng, destination.lat, destination.lng, originLabel ?? null, destinationLabel ?? null,
-          zone.id, route.distanceM, durationS, JSON.stringify(breakdown), fare.totalCents, pricing.quoteTtlSec],
+          zone.id, route.distanceM, durationS, JSON.stringify(breakdown), fare.totalCents, pricing.quoteTtlSec,
+          service, payload ? JSON.stringify(payload) : null],
       );
       return {
         quoteId: q.id,
+        service,
         totalCents: fare.totalCents,
         currency: 'USD',
         breakdown,

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { blindIndex, decrypt, deriveKeys, encrypt, safeEqual } from '../../src/lib/crypto.js';
 import { base32Decode, base32Encode, hotp, verifyTotp } from '../../src/lib/totp.js';
-import { isValidCedula, normalizeEcMobile, normalizePlate, normalizeReference } from '../../src/lib/ecuador.js';
+import { isValidCedula, isValidRuc, normalizeEcMobile, normalizePlate, normalizeReference } from '../../src/lib/ecuador.js';
 import { parseAmountToCents, parseCsv } from '../../src/lib/csv.js';
 import { makeCedula } from '../helpers.js';
 
@@ -51,6 +51,16 @@ test('cédula ecuatoriana: algoritmo módulo 10', () => {
   assert.equal(isValidCedula('9910034065'), false, 'provincia inexistente');
   assert.equal(isValidCedula('1790034065'), false, 'tercer dígito >= 6');
   assert.equal(isValidCedula('17100340'), false);
+});
+
+test('RUC: persona natural (cédula + 001), sociedad (9) y pública (6)', () => {
+  assert.equal(isValidRuc('1710034065001'), true);
+  assert.equal(isValidRuc('1710034066001'), false, 'cédula inválida');
+  assert.equal(isValidRuc('1710034065000'), false, 'establecimiento 000');
+  assert.equal(isValidRuc('1390012345001'), true, 'sociedad privada de Manabí');
+  assert.equal(isValidRuc('1360000000001'), true, 'entidad pública');
+  assert.equal(isValidRuc('9990012345001'), false, 'provincia inexistente');
+  assert.equal(isValidRuc('17100340650'), false);
 });
 
 test('normalización de celular, placa y referencia bancaria', () => {

@@ -81,12 +81,15 @@ export function appRoutes({ services, config }) {
 
   // ---------- Viajes ----------
   r.post('/trips/quote', auth, requireProfile, limiter({ windowMs: 10 * 60_000, limit: 40, scale, key: byUser }), async (req, res) => {
-    res.json(await services.pricing.quote({ passengerId: req.user.id, ...S.quote.parse(req.body) }));
+    const { parcel, ...body } = S.quote.parse(req.body);
+    const payload = body.service === 'parcel' ? await services.trips.parcelPayload(parcel) : null;
+    res.json(await services.pricing.quote({ passengerId: req.user.id, ...body, payload }));
   });
   r.post('/trips', auth, requireProfile, limiter({ windowMs: 10 * 60_000, limit: 15, scale, key: byUser }), async (req, res) => {
     res.status(201).json(await services.trips.request({ passengerId: req.user.id, quoteId: S.tripRequest.parse(req.body).quoteId, ip: req.ip }));
   });
   r.get('/trips/current', auth, async (req, res) => res.json({ trip: await services.trips.current(req.user.id) }));
+  r.get('/trips/active', auth, async (req, res) => res.json(await services.trips.active(req.user.id)));
   r.get('/trips/history', auth, async (req, res) => res.json(await services.trips.history(req.user.id)));
   r.get('/trips/:id', auth, async (req, res) => res.json(await services.trips.get({ tripId: id(req), userId: req.user.id })));
   r.post('/trips/:id/accept', auth, requireApprovedDriver, async (req, res) => {
@@ -100,10 +103,19 @@ export function appRoutes({ services, config }) {
     res.json(await services.trips.arrived({ tripId: id(req), driverId: req.user.id }));
   });
   r.post('/trips/:id/start', auth, requireApprovedDriver, async (req, res) => {
-    res.json(await services.trips.start({ tripId: id(req), driverId: req.user.id, pin: S.pin.parse(req.body).pin, ip: req.ip }));
+    res.json(await services.trips.start({ tripId: id(req), driverId: req.user.id, pin: S.pin.parse(req.body ?? {}).pin, ip: req.ip }));
   });
   r.post('/trips/:id/complete', auth, requireApprovedDriver, async (req, res) => {
-    res.json(await services.trips.complete({ tripId: id(req), driverId: req.user.id, ip: req.ip }));
+    const { pin } = S.deliveryPin.parse(req.body ?? {});
+    res.json(await services.trips.complete({ tripId: id(req), driverId: req.user.id, pin, ip: req.ip }));
+  });
+  // Fotos de evidencia (mensajería/comida): solo el conductor sube; cliente y conductor ven.
+  r.put('/trips/:id/photos/:stage', auth, requireApprovedDriver, limiter({ windowMs: 60 * 60_000, limit: 60, scale, key: byUser }), singleImage('file'), async (req, res) => {
+    res.json(await services.trips.uploadPhoto({ tripId: id(req), driverId: req.user.id, stage: String(req.params.stage), file: req.file }));
+  });
+  r.get('/trips/:id/photos/:stage', auth, async (req, res) => {
+    const img = await services.trips.photo({ tripId: id(req), userId: req.user.id, stage: String(req.params.stage) });
+    res.set({ 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' }).send(img);
   });
   r.post('/trips/:id/cancel', auth, async (req, res) => {
     const tripId = id(req);
@@ -118,6 +130,22 @@ export function appRoutes({ services, config }) {
   });
   r.post('/trips/:id/share', auth, async (req, res) => {
     res.json(await services.trips.createShareLink({ tripId: id(req), userId: req.user.id }));
+  });
+
+  // ---------- Delivery de comida ----------
+  r.get('/merchants', auth, async (req, res) => res.json(await services.merchants.nearby(S.nearby.parse(req.query))));
+  r.get('/merchants/:id', auth, async (req, res) => res.json(await services.merchants.publicMenu(id(req))));
+  r.post('/orders/quote', auth, requireProfile, limiter({ windowMs: 10 * 60_000, limit: 40, scale, key: byUser }), async (req, res) => {
+    res.json(await services.orders.quote({ customerId: req.user.id, ...S.orderQuote.parse(req.body) }));
+  });
+  r.post('/orders', auth, requireProfile, limiter({ windowMs: 10 * 60_000, limit: 10, scale, key: byUser }), async (req, res) => {
+    const body = S.orderPlace.parse(req.body);
+    res.status(201).json(await services.orders.place({ customerId: req.user.id, ...body, ip: req.ip }));
+  });
+  r.get('/orders', auth, async (req, res) => res.json(await services.orders.listForCustomer(req.user.id)));
+  r.get('/orders/:id', auth, async (req, res) => res.json(await services.orders.getForCustomer(req.user.id, id(req))));
+  r.post('/orders/:id/cancel', auth, async (req, res) => {
+    res.json(await services.orders.cancelByCustomer({ customerId: req.user.id, orderId: id(req), ip: req.ip }));
   });
 
   // ---------- Seguridad ----------

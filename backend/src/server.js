@@ -24,6 +24,7 @@ export async function startServer(config, overrides = {}) {
     sweeping = true;
     try {
       await ctx.services.trips.sweep();
+      await ctx.services.orders.sweep();
     } catch (err) {
       ctx.logger.error({ err }, 'Fallo en el despachador');
     } finally {

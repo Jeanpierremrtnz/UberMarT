@@ -91,6 +91,32 @@ export function adminRoutes({ services, config, db, realtime }) {
     });
   }
 
+  // ---------- Locales (restaurantes y comercios) ----------
+  r.get('/merchants', can('merchants.read'), async (req, res) => {
+    const status = String(req.query.status ?? 'submitted');
+    if (!['all', 'draft', 'submitted', 'approved', 'rejected', 'suspended'].includes(status)) throw badRequest('STATUS_INVALID', 'Estado inválido');
+    res.json(await services.merchants.adminList(status));
+  });
+  r.get('/merchants/:id', can('merchants.review'), async (req, res) => {
+    res.json(await services.merchants.adminDetail(id(req), { adminId: req.admin.id, ip: req.ip }));
+  });
+  r.get('/merchants/:id/documents/:kind', can('merchants.review'), async (req, res) => {
+    sendImage(res, await services.merchants.adminDocument(id(req), String(req.params.kind)));
+  });
+  r.get('/merchants/:id/menu/:itemId/photo', can('merchants.review'), async (req, res) => {
+    sendImage(res, await services.merchants.itemPhoto(id(req), uuid.parse(req.params.itemId), { publicOnly: false }));
+  });
+  for (const decision of ['approve', 'reject', 'suspend']) {
+    r.post(`/merchants/:id/${decision}`, can('merchants.review'), async (req, res) => {
+      const body = S.merchantReview.parse(req.body ?? {});
+      res.json(await services.merchants.review(id(req), decision, { adminId: req.admin.id, ...body, ip: req.ip }));
+    });
+  }
+  r.post('/merchants/:id/payments', can('merchants.finance'), async (req, res) => {
+    const body = S.merchantPayment.parse(req.body);
+    res.json(await services.merchants.recordPayment(id(req), { ...body, adminId: req.admin.id, ip: req.ip }));
+  });
+
   // ---------- Usuarios ----------
   r.post('/users/:id/suspend', can('users.manage'), async (req, res) => {
     const userId = id(req);

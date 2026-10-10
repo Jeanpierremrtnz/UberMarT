@@ -63,7 +63,8 @@ async function enterApp(admin, csrf) {
   $('#login-view').hidden = true;
   $('#app-view').hidden = false;
   const visible = {
-    topups: ['owner', 'finance'], drivers: ['owner', 'operations'], sos: ['owner', 'operations'], pricing: ['owner', 'finance', 'operations'],
+    topups: ['owner', 'finance'], drivers: ['owner', 'operations'], merchants: ['owner', 'operations', 'finance'],
+    sos: ['owner', 'operations'], pricing: ['owner', 'finance', 'operations'],
   };
   for (const btn of document.querySelectorAll('#tabs .tab')) btn.hidden = !visible[btn.dataset.tab].includes(admin.role);
   const first = [...document.querySelectorAll('#tabs .tab')].find((b) => !b.hidden);
@@ -96,7 +97,7 @@ function switchTab(tab) {
   state.tab = tab;
   for (const btn of document.querySelectorAll('#tabs .tab')) btn.classList.toggle('active', btn.dataset.tab === tab);
   for (const panel of document.querySelectorAll('.tab-panel')) panel.hidden = panel.id !== `tab-${tab}`;
-  ({ topups: loadQueue, drivers: loadDrivers, sos: loadSos, pricing: loadPricing })[tab]();
+  ({ topups: loadQueue, drivers: loadDrivers, merchants: loadMerchants, sos: loadSos, pricing: loadPricing })[tab]();
 }
 $('#tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('.tab');
@@ -129,6 +130,11 @@ function connectEvents() {
     if (state.tab === 'topups' && !$('#topup-empty').hidden) loadQueue();
   });
   state.events.addEventListener('driver:submitted', refreshBadges);
+  state.events.addEventListener('merchant:submitted', refreshBadges);
+  state.events.addEventListener('order:no_driver', () => {
+    beep();
+    alert('Un pedido de comida no consiguió motorizado. Revisa con el local y el cliente.');
+  });
 }
 
 async function refreshBadges() {
@@ -139,6 +145,7 @@ async function refreshBadges() {
   if (['owner', 'operations'].includes(role)) {
     api('/drivers?status=submitted').then((l) => { $('#badge-drivers').textContent = l.length || ''; }).catch(() => {});
     api('/incidents?status=open').then((l) => { $('#badge-sos').textContent = l.length || ''; }).catch(() => {});
+    api('/merchants?status=submitted').then((l) => { $('#badge-merchants').textContent = l.length || ''; }).catch(() => {});
   }
 }
 
@@ -270,7 +277,7 @@ async function openDriver(id, li) {
       msg.textContent = err.message;
     }
   };
-  $('#driver-detail').replaceChildren(
+  $('#driver-detail').replaceChildren(...[
     h('h3', {}, d.fullName),
     h('p', {}, `Cédula: ${d.cedula ?? '—'} · Teléfono: ${d.phone}`),
     h('p', {}, `Licencia: ${d.licenseNumber ?? '—'} (vence ${d.licenseExpiresOn ?? '—'})`),
@@ -287,7 +294,91 @@ async function openDriver(id, li) {
       d.status === 'submitted' ? h('button', { class: 'btn reject', onclick: act('reject') }, 'Rechazar') : null,
       ['approved', 'submitted'].includes(d.status) ? h('button', { class: 'btn', onclick: act('suspend') }, 'Suspender') : null),
     msg,
-  );
+  ].filter(Boolean));
+}
+
+// ---------- Comercios ----------
+const MERCHANT_DOCS = {
+  ruc: 'Certificado RUC', permiso_funcionamiento: 'Permiso de funcionamiento', cedula_owner: 'Cédula del dueño', storefront: 'Fachada',
+};
+
+async function loadMerchants() {
+  const list = await api(`/merchants?status=${$('#merchant-status').value}`);
+  const ul = $('#merchant-list');
+  ul.replaceChildren(...list.map((m) => h('li', { onclick: (e) => openMerchant(m.id, e.currentTarget) },
+    h('strong', {}, m.name), h('br'),
+    h('span', { class: 'muted' }, `RUC ${m.ruc} · ${m.category}${m.owedCents > 0 ? ` · debe ${money(m.owedCents)}` : ''}`))));
+  if (!list.length) ul.append(h('li', { class: 'muted' }, 'Sin registros'));
+  $('#merchant-detail').replaceChildren(h('p', { class: 'muted' }, 'Selecciona un local.'));
+}
+$('#merchant-status').addEventListener('change', loadMerchants);
+
+async function openMerchant(id, li) {
+  for (const x of document.querySelectorAll('#merchant-list li')) x.classList.toggle('selected', x === li);
+  const role = state.admin.role;
+  const canReview = ['owner', 'operations'].includes(role);
+  const canFinance = ['owner', 'finance'].includes(role);
+  const m = canReview ? await api(`/merchants/${id}`) : null;
+  const msg = h('p', { class: 'error' });
+  const children = [];
+  if (m) {
+    const note = h('input', { placeholder: 'Motivo u observación (obligatorio para rechazar o suspender)', maxlength: 300 });
+    const commission = h('input', { type: 'number', min: 0, max: 50, step: '0.5', value: m.commissionPercent });
+    const act = (decision) => async () => {
+      try {
+        await api(`/merchants/${id}/${decision}`, {
+          method: 'POST',
+          body: { note: note.value || undefined, ...(decision === 'approve' ? { commissionBps: Math.round(Number(commission.value) * 100) } : {}) },
+        });
+        loadMerchants();
+        refreshBadges();
+      } catch (err) {
+        msg.textContent = err.message;
+      }
+    };
+    children.push(
+      h('h3', {}, m.name),
+      h('p', {}, `${m.category} · RUC ${m.ruc} · ${m.addressLabel}`),
+      h('p', {}, `Dueño: ${m.ownerName} · Cédula ${m.ownerCedula} · ${m.phone} · ${m.ownerEmail ?? ''}`),
+      h('p', {}, h('a', { class: 'btn small', target: '_blank', rel: 'noopener noreferrer', href: `https://www.openstreetmap.org/?mlat=${m.location.lat}&mlon=${m.location.lng}#map=18/${m.location.lat}/${m.location.lng}` }, 'Ver ubicación del local')),
+      m.reviewNote ? h('p', { class: 'muted' }, `Nota: ${m.reviewNote}`) : null,
+      h('p', { class: 'muted' }, 'Verifica el RUC en el portal del SRI, que el permiso esté vigente, que la cédula coincida con el dueño y que la fachada corresponda a la dirección.'),
+      h('div', { class: 'docs' }, m.documents.map((d) => h('figure', {},
+        h('img', { src: d.url, alt: MERCHANT_DOCS[d.kind], onclick: (e) => { $('#zoom-img').src = e.target.src; $('#zoom').showModal(); } }),
+        h('figcaption', {}, MERCHANT_DOCS[d.kind])))),
+      h('h3', {}, `Productos (${m.menu.length})`),
+      h('ul', { class: 'items' }, m.menu.slice(0, 50).map((i) => h('li', {}, `${i.name} · ${money(i.priceCents)}${i.isAvailable ? '' : ' (agotado)'}`))),
+      h('div', { class: 'row' }, h('label', { class: 'narrow' }, 'Comisión % ', commission)),
+      note,
+      h('div', { class: 'row' },
+        ['submitted', 'suspended'].includes(m.status) ? h('button', { class: 'btn approve', onclick: act('approve') }, 'Aprobar') : null,
+        m.status === 'submitted' ? h('button', { class: 'btn reject', onclick: act('reject') }, 'Rechazar') : null,
+        ['approved', 'submitted'].includes(m.status) ? h('button', { class: 'btn', onclick: act('suspend') }, 'Suspender') : null),
+      h('h3', {}, `Cuenta: debe ${money(Math.max(0, m.ledger.owedCents))}`),
+    );
+  } else {
+    children.push(h('p', { class: 'muted' }, 'Tu rol solo puede registrar pagos de comisiones.'));
+  }
+  if (canFinance) {
+    const amount = h('input', { inputmode: 'decimal', placeholder: 'Monto recibido (ej. 25.00)' });
+    const pnote = h('input', { placeholder: 'Referencia del pago', maxlength: 300 });
+    children.push(h('div', { class: 'row' }, amount, pnote, h('button', { class: 'btn small primary', onclick: async () => {
+      const cents = Math.round(Number(String(amount.value).replace(',', '.')) * 100);
+      if (!cents || cents < 1) {
+        msg.textContent = 'Monto inválido';
+        return;
+      }
+      try {
+        const l = await api(`/merchants/${id}/payments`, { method: 'POST', body: { amountCents: cents, note: pnote.value || undefined } });
+        msg.textContent = `Pago registrado. Saldo pendiente: ${money(Math.max(0, l.owedCents))}`;
+        loadMerchants();
+      } catch (err) {
+        msg.textContent = err.message;
+      }
+    } }, 'Registrar pago')));
+  }
+  children.push(msg);
+  $('#merchant-detail').replaceChildren(...children.filter(Boolean));
 }
 
 // ---------- SOS ----------

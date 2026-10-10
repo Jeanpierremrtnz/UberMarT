@@ -3,12 +3,12 @@ import { EventEmitter } from 'node:events';
 /**
  * Punto único para emitir eventos en tiempo real:
  *  - apps (Socket.io): salas por usuario `u:<id>` y por viaje `trip:<id>`,
- *  - panel administrativo: Server-Sent Events (EventSource nativo del navegador).
+ *  - panel administrativo y panel de locales: Server-Sent Events (EventSource nativo).
  */
 export function createRealtimeBus() {
   let io = null;
   const admin = new EventEmitter();
-  admin.setMaxListeners(100);
+  admin.setMaxListeners(1000);
 
   return {
     attach(server) {
@@ -27,6 +27,14 @@ export function createRealtimeBus() {
     onAdminEvent(listener) {
       admin.on('event', listener);
       return () => admin.off('event', listener);
+    },
+    /** Eventos para el panel de un local (pedidos nuevos y cambios de estado). */
+    toMerchant(merchantId, event, data) {
+      admin.emit(`merchant:${merchantId}`, { event, data });
+    },
+    onMerchantEvent(merchantId, listener) {
+      admin.on(`merchant:${merchantId}`, listener);
+      return () => admin.off(`merchant:${merchantId}`, listener);
     },
     disconnectUser(userId) {
       io?.in(`u:${userId}`).disconnectSockets(true);

@@ -30,15 +30,18 @@ const TABLES = [
   'admins', 'admin_sessions', 'users', 'otp_challenges', 'refresh_tokens', 'emergency_contacts', 'drivers',
   'driver_documents', 'settings', 'wallets', 'wallet_entries', 'topups', 'bank_statement_lines', 'gateway_events',
   'fare_quotes', 'trips', 'trip_offers', 'trip_points', 'safety_incidents', 'audit_log',
+  'trip_parcels', 'merchants', 'merchant_documents', 'menu_items', 'orders', 'merchant_ledger',
 ];
 
 export async function resetDb(db) {
   await db.query(`
     ALTER TABLE wallet_entries DISABLE TRIGGER USER;
     ALTER TABLE audit_log DISABLE TRIGGER USER;
+    ALTER TABLE merchant_ledger DISABLE TRIGGER USER;
     TRUNCATE ${TABLES.join(', ')} RESTART IDENTITY CASCADE;
     ALTER TABLE wallet_entries ENABLE TRIGGER USER;
-    ALTER TABLE audit_log ENABLE TRIGGER USER;`);
+    ALTER TABLE audit_log ENABLE TRIGGER USER;
+    ALTER TABLE merchant_ledger ENABLE TRIGGER USER;`);
 }
 
 /** Levanta la API completa contra la BD de pruebas. */

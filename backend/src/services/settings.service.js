@@ -46,6 +46,33 @@ export const SETTINGS_SCHEMAS = {
   weather: z.object({
     mode: z.enum(['auto', 'force_rain', 'force_dry']),
   }),
+  // Tarifas y reglas propias de mensajería y delivery (el multiplicador dinámico y
+  // el recargo por lluvia se aplican igual que en los viajes).
+  services: z.object({
+    parcel: z.object({
+      enabled: z.boolean(),
+      baseCents: cents,
+      perKmCents: cents,
+      perMinCents: cents,
+      minFareCents: cents,
+      maxWeightKg: z.number().min(1).max(30),
+      maxDeclaredValueCents: z.number().int().min(0).max(100_000),
+      maxActivePerSender: z.number().int().min(1).max(10),
+    }),
+    food: z.object({
+      enabled: z.boolean(),
+      baseCents: cents,
+      perKmCents: cents,
+      perMinCents: cents,
+      minFareCents: cents,
+      maxDistanceMeters: z.number().int().min(1000).max(30_000),
+      maxCashOrderCents: z.number().int().min(500).max(100_000),
+      newCustomerMaxCents: z.number().int().min(500).max(100_000),
+      merchantResponseMin: z.number().int().min(2).max(30),
+      dispatchLeadMin: z.number().int().min(0).max(30),
+      searchMaxMin: z.number().int().min(5).max(60),
+    }),
+  }),
   topupAccounts: z
     .array(
       z.object({
@@ -97,6 +124,31 @@ export const SETTINGS_DEFAULTS = Object.freeze({
     arrivalRadiusMeters: 300,
   },
   weather: { mode: 'auto' },
+  services: {
+    parcel: {
+      enabled: true,
+      baseCents: 50,
+      perKmCents: 25,
+      perMinCents: 3,
+      minFareCents: 125,
+      maxWeightKg: 10,
+      maxDeclaredValueCents: 10_000,
+      maxActivePerSender: 3,
+    },
+    food: {
+      enabled: true,
+      baseCents: 50,
+      perKmCents: 20,
+      perMinCents: 0,
+      minFareCents: 100,
+      maxDistanceMeters: 7000,
+      maxCashOrderCents: 4000,
+      newCustomerMaxCents: 2000,
+      merchantResponseMin: 8,
+      dispatchLeadMin: 8,
+      searchMaxMin: 20,
+    },
+  },
   topupAccounts: [],
 });
 

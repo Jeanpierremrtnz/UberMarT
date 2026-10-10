@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   <title>UberMarT · Panel</title>
-  <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="app.css">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/panel.css">
   <script type="module" src="app.js"></script>
 </head>
 <body>
@@ -29,6 +29,7 @@
       <nav id="tabs">
         <button data-tab="topups" class="tab">Recargas <span id="badge-topups" class="badge"></span></button>
         <button data-tab="drivers" class="tab">Conductores <span id="badge-drivers" class="badge"></span></button>
+        <button data-tab="merchants" class="tab">Comercios <span id="badge-merchants" class="badge"></span></button>
         <button data-tab="sos" class="tab">SOS <span id="badge-sos" class="badge danger"></span></button>
         <button data-tab="pricing" class="tab">Tarifas</button>
       </nav>
@@ -95,6 +96,23 @@
         <div class="split">
           <ul id="driver-list" class="list"></ul>
           <div id="driver-detail" class="detail"><p class="muted">Selecciona un conductor.</p></div>
+        </div>
+      </section>
+
+      <section id="tab-merchants" class="tab-panel" hidden>
+        <div class="toolbar">
+          <h2>Restaurantes y locales</h2>
+          <select id="merchant-status">
+            <option value="submitted">Pendientes de revisión</option>
+            <option value="approved">Aprobados</option>
+            <option value="draft">En registro</option>
+            <option value="rejected">Rechazados</option>
+            <option value="suspended">Suspendidos</option>
+          </select>
+        </div>
+        <div class="split">
+          <ul id="merchant-list" class="list"></ul>
+          <div id="merchant-detail" class="detail"><p class="muted">Selecciona un local.</p></div>
         </div>
       </section>
 

@@ -22,12 +22,18 @@ import { createTripService } from './services/trip.service.js';
 import { createDriverService } from './services/driver.service.js';
 import { createSafetyService } from './services/safety.service.js';
 import { createGeoService } from './services/geo.service.js';
+import { createMerchantService } from './services/merchant.service.js';
+import { createOrderService } from './services/order.service.js';
 import { errorHandler, limiter, requestContext } from './http/middleware.js';
 import { appRoutes } from './http/app-routes.js';
 import { adminRoutes } from './http/admin-routes.js';
 import { publicRoutes } from './http/public-routes.js';
+import { merchantRoutes } from './http/merchant-routes.js';
 
-const ADMIN_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'admin');
+const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const ADMIN_DIR = path.join(ROOT_DIR, 'admin');
+const MERCHANT_DIR = path.join(ROOT_DIR, 'comercio');
+const ASSETS_DIR = path.join(ROOT_DIR, 'public');
 
 /** Construye todas las dependencias. `overrides.fetch` permite simular APIs externas en pruebas. */
 export function createContext(config, overrides = {}) {
@@ -50,10 +56,12 @@ export function createContext(config, overrides = {}) {
   const weather = createWeatherService({ config, settings, logger, fetchImpl });
   const routing = createRoutingService({ config, logger, fetchImpl });
   const pricing = createPricingService({ db, settings, weather, routing });
-  const trips = createTripService({ db, settings, wallet, realtime, audit, activeTrips, config, logger });
+  const trips = createTripService({ db, settings, wallet, realtime, audit, activeTrips, config, logger, storage, sms });
   const drivers = createDriverService({ db, keys, storage, settings, audit, realtime });
   const safety = createSafetyService({ db, sms, realtime, audit, trips, logger });
   const geo = createGeoService({ config, logger, fetchImpl });
+  const merchants = createMerchantService({ db, keys, storage, audit, realtime, auth, adminAuth, pricing, settings });
+  const orders = createOrderService({ db, settings, pricing, trips, realtime, audit });
 
   return {
     config,
@@ -62,7 +70,9 @@ export function createContext(config, overrides = {}) {
     keys,
     realtime,
     activeTrips,
-    services: { audit, settings, sms, auth, adminAuth, wallet, payphone, topups, weather, routing, pricing, trips, drivers, safety, geo },
+    services: {
+      audit, settings, sms, auth, adminAuth, wallet, payphone, topups, weather, routing, pricing, trips, drivers, safety, geo, merchants, orders,
+    },
   };
 }
 
@@ -96,8 +106,10 @@ export function createApp(ctx) {
       referrerPolicy: { policy: 'no-referrer' },
     }),
   );
-  app.use((_req, res, next) => {
-    res.set('Permissions-Policy', 'geolocation=(), camera=(), microphone=(), payment=()');
+  app.use((req, res, next) => {
+    // El registro de locales puede usar la ubicación del navegador para marcar el local.
+    const geo = req.path.startsWith('/comercio') ? 'geolocation=(self)' : 'geolocation=()';
+    res.set('Permissions-Policy', `${geo}, camera=(), microphone=(), payment=()`);
     next();
   });
   app.use('/api', (_req, res, next) => {
@@ -110,8 +122,12 @@ export function createApp(ctx) {
 
   app.use(publicRoutes(ctx));
   app.use('/api/admin', adminRoutes(ctx));
+  app.use('/api/merchant', merchantRoutes(ctx));
   app.use('/api', appRoutes(ctx));
-  app.use('/admin', express.static(ADMIN_DIR, { index: 'index.html', dotfiles: 'deny', fallthrough: true, maxAge: config.isProd ? '1h' : 0 }));
+  const staticOpts = { index: 'index.html', dotfiles: 'deny', fallthrough: true, maxAge: config.isProd ? '1h' : 0 };
+  app.use('/admin', express.static(ADMIN_DIR, staticOpts));
+  app.use('/comercio', express.static(MERCHANT_DIR, staticOpts));
+  app.use('/assets', express.static(ASSETS_DIR, staticOpts));
 
   app.use((_req, res) => res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No encontrado' } }));
   app.use(errorHandler(logger));

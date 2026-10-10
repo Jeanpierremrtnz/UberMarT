@@ -15,6 +15,8 @@ COPY backend/src ./backend/src
 COPY backend/migrations ./backend/migrations
 COPY backend/scripts ./backend/scripts
 COPY admin ./admin
+COPY comercio ./comercio
+COPY public ./public
 RUN mkdir -p /data/storage && chown -R node:node /data
 USER node
 WORKDIR /app/backend
