@@ -6,11 +6,14 @@ import '../config.dart';
 import '../core/geo.dart';
 import '../core/services.dart';
 import '../core/validators.dart';
+import '../food/merchants_screen.dart';
+import '../shared/activity_screen.dart';
 import '../shared/emergency_contacts_screen.dart';
 import '../widgets/common.dart';
+import 'parcel_form.dart';
 import 'trip_screen.dart';
 
-/// Inicio del pasajero: marcar recogida y destino en el mapa, cotizar y pedir.
+/// Inicio del cliente: viaje en moto, envío (mensajería) o delivery de comida.
 class PassengerHome extends StatefulWidget {
   const PassengerHome({super.key, required this.profile});
 
@@ -22,9 +25,11 @@ class PassengerHome extends StatefulWidget {
 
 class _PassengerHomeState extends State<PassengerHome> {
   final _map = MapController();
+  String _service = 'ride';
   LatLng? _pickup;
   LatLng? _dropoff;
   bool _choosingPickup = true;
+  Map<String, dynamic>? _parcel;
   Map<String, dynamic>? _quote;
   List<LatLng> _route = const [];
   bool _busy = false;
@@ -42,16 +47,28 @@ class _PassengerHomeState extends State<PassengerHome> {
     try {
       final res = await Services.of(context).api.get('/api/trips/current');
       final trip = res['trip'];
-      if (trip != null && mounted) _openTrip(Map<String, dynamic>.from(trip as Map));
+      if (trip != null && trip['service'] == 'ride' && mounted) _openTrip(Map<String, dynamic>.from(trip as Map));
     } catch (_) {/* sin viaje activo */}
   }
 
   Future<void> _locate() async {
-    final pos = await currentPosition().catchError((_) => null);
+    final pos = await currentPosition();
     if (pos == null || !mounted) return;
     final here = LatLng(pos.latitude, pos.longitude);
     setState(() => _pickup ??= here);
     _map.move(here, 16);
+  }
+
+  void _selectService(String service) {
+    if (service == 'food') {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MerchantsScreen()));
+      return;
+    }
+    setState(() {
+      _service = service;
+      _quote = null;
+      _route = const [];
+    });
   }
 
   void _onTap(TapPosition _, LatLng point) {
@@ -69,11 +86,19 @@ class _PassengerHomeState extends State<PassengerHome> {
 
   Future<void> _getQuote() async {
     if (_pickup == null || _dropoff == null) return;
+    if (_service == 'parcel') {
+      final parcel = await showParcelForm(context, initial: _parcel);
+      if (parcel == null) return;
+      _parcel = parcel;
+    }
+    if (!mounted) return;
     setState(() => _busy = true);
     try {
       final q = Map<String, dynamic>.from(await Services.of(context).api.post('/api/trips/quote', {
+        'service': _service,
         'origin': {'lat': _pickup!.latitude, 'lng': _pickup!.longitude},
         'destination': {'lat': _dropoff!.latitude, 'lng': _dropoff!.longitude},
+        if (_service == 'parcel') 'parcel': _parcel,
       }) as Map);
       setState(() {
         _quote = q;
@@ -86,7 +111,7 @@ class _PassengerHomeState extends State<PassengerHome> {
     }
   }
 
-  Future<void> _requestTrip() async {
+  Future<void> _request() async {
     setState(() => _busy = true);
     try {
       final trip = await Services.of(context).api.post('/api/trips', {'quoteId': _quote!['quoteId']});
@@ -94,6 +119,7 @@ class _PassengerHomeState extends State<PassengerHome> {
       setState(() {
         _quote = null;
         _dropoff = null;
+        _parcel = null;
         _route = const [];
       });
       _openTrip(Map<String, dynamic>.from(trip as Map));
@@ -116,12 +142,32 @@ class _PassengerHomeState extends State<PassengerHome> {
         title: Text('Hola, ${(widget.profile['fullName'] as String? ?? '').split(' ').first}'),
         actions: [
           IconButton(
+            tooltip: 'Mis envíos y pedidos',
+            icon: const Icon(Icons.receipt_long),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ActivityScreen())),
+          ),
+          IconButton(
             tooltip: 'Contactos de emergencia',
             icon: const Icon(Icons.health_and_safety),
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EmergencyContactsScreen())),
           ),
           IconButton(tooltip: 'Salir', icon: const Icon(Icons.logout), onPressed: () => services.session.clear()),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(56),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'ride', label: Text('Viaje'), icon: Icon(Icons.two_wheeler)),
+                ButtonSegment(value: 'parcel', label: Text('Envío'), icon: Icon(Icons.inventory_2)),
+                ButtonSegment(value: 'food', label: Text('Comida'), icon: Icon(Icons.restaurant)),
+              ],
+              selected: {_service},
+              onSelectionChanged: (s) => _selectService(s.first),
+            ),
+          ),
+        ),
       ),
       body: Stack(
         children: [
@@ -143,9 +189,9 @@ class _PassengerHomeState extends State<PassengerHome> {
             left: 12,
             right: 12,
             child: SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: true, label: Text('Recogida'), icon: Icon(Icons.trip_origin)),
-                ButtonSegment(value: false, label: Text('Destino'), icon: Icon(Icons.location_on)),
+              segments: [
+                ButtonSegment(value: true, label: Text(_service == 'parcel' ? 'Recoger en' : 'Recogida'), icon: const Icon(Icons.trip_origin)),
+                ButtonSegment(value: false, label: Text(_service == 'parcel' ? 'Entregar en' : 'Destino'), icon: const Icon(Icons.location_on)),
               ],
               selected: {_choosingPickup},
               onSelectionChanged: (s) => setState(() => _choosingPickup = s.first),
@@ -159,20 +205,23 @@ class _PassengerHomeState extends State<PassengerHome> {
 
   Widget _bottomCard() {
     final q = _quote;
+    final isParcel = _service == 'parcel';
     return Card(
       margin: const EdgeInsets.all(12),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: q == null
             ? Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text(_dropoff == null ? 'Toca el mapa para marcar tu destino' : 'Listo para cotizar'),
+                Text(_dropoff == null
+                    ? (isParcel ? 'Marca en el mapa dónde recoger y dónde entregar' : 'Toca el mapa para marcar tu destino')
+                    : 'Listo para cotizar'),
                 const SizedBox(height: 12),
                 FilledButton(
                   onPressed: _busy || _pickup == null || _dropoff == null ? null : _getQuote,
-                  child: const Text('Ver tarifa'),
+                  child: Text(isParcel ? 'Datos del paquete y tarifa' : 'Ver tarifa'),
                 ),
               ])
-            : _QuoteView(quote: q, busy: _busy, onRequest: _requestTrip),
+            : _QuoteView(quote: q, busy: _busy, onRequest: _request, isParcel: isParcel),
       ),
     );
   }
@@ -180,11 +229,12 @@ class _PassengerHomeState extends State<PassengerHome> {
 
 /// Tarifa transparente: total y desglose (base, distancia, tiempo, multiplicador, lluvia).
 class _QuoteView extends StatelessWidget {
-  const _QuoteView({required this.quote, required this.busy, required this.onRequest});
+  const _QuoteView({required this.quote, required this.busy, required this.onRequest, required this.isParcel});
 
   final Map<String, dynamic> quote;
   final bool busy;
   final VoidCallback onRequest;
+  final bool isParcel;
 
   @override
   Widget build(BuildContext context) {
@@ -212,7 +262,7 @@ class _QuoteView extends StatelessWidget {
         textAlign: TextAlign.center,
       ),
       const SizedBox(height: 12),
-      FilledButton(onPressed: busy ? null : onRequest, child: const Text('Pedir moto')),
+      FilledButton(onPressed: busy ? null : onRequest, child: Text(isParcel ? 'Enviar paquete' : 'Pedir moto')),
     ]);
   }
 }

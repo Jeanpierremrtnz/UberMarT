@@ -234,15 +234,29 @@ class _DriverHomeState extends State<DriverHome> {
   Widget _offerCard(Map<String, dynamic> offer) {
     final pickup = offer['pickup'] as Map;
     final dropoff = offer['dropoff'] as Map;
+    final service = offer['service'] as String? ?? 'ride';
+    final parcel = offer['parcel'] as Map?;
+    final food = offer['food'] as Map?;
+    final title = switch (service) {
+      'parcel' => 'Nuevo envío',
+      'food' => 'Nuevo delivery${food?['merchantName'] != null ? ' de ${food!['merchantName']}' : ''}',
+      _ => 'Nuevo viaje',
+    };
     return Card(
       margin: const EdgeInsets.all(12),
       color: Theme.of(context).colorScheme.primaryContainer,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('Nuevo viaje · ${formatCents(offer['fareCents'] as int)}', style: Theme.of(context).textTheme.titleLarge),
+          Text('$title · Ganas ${formatCents(offer['fareCents'] as int)}', style: Theme.of(context).textTheme.titleLarge),
           Text('Recogida a ${((offer['pickupDistanceM'] as int) / 1000).toStringAsFixed(1)} km: ${pickup['label'] ?? 'punto en el mapa'}'),
-          Text('Viaje de ${((offer['tripDistanceM'] as int) / 1000).toStringAsFixed(1)} km hacia ${dropoff['label'] ?? 'destino en el mapa'}'),
+          Text('Recorrido de ${((offer['tripDistanceM'] as int) / 1000).toStringAsFixed(1)} km hacia ${dropoff['label'] ?? 'destino en el mapa'}'),
+          if (parcel != null) Text('Paquete ${parcel['size']} · ${parcel['weightKg']} kg · ${parcel['description']}'),
+          if (food != null)
+            Text('Pagas ${formatCents(food['payMerchantCents'] as int)} al local y cobras ${formatCents(offer['collectCents'] as int)} al cliente',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+          if (service == 'parcel')
+            Text(offer['collectAt'] == 'pickup' ? 'Cobras al recoger el paquete' : 'Cobras al entregar el paquete'),
           const SizedBox(height: 12),
           Row(children: [
             Expanded(child: OutlinedButton(onPressed: () => _respond(false), child: const Text('Rechazar'))),

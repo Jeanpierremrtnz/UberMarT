@@ -31,6 +31,7 @@ class Realtime {
     'wallet:update',
     'topup:update',
     'driver:status',
+    'order:update',
   ];
 
   void connect() {

@@ -17,13 +17,20 @@ Marker pin(LatLng point, IconData icon, Color color, {double size = 40}) => Mark
       child: Icon(icon, color: color, size: size),
     );
 
-/// Pide permiso y devuelve la ubicación actual (o null si no se concede).
-Future<Position?> currentPosition() async {
-  if (!await Geolocator.isLocationServiceEnabled()) return null;
-  var permission = await Geolocator.checkPermission();
-  if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
-  if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return null;
-  return Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
+/// Pide permiso y devuelve la ubicación actual, o null si no se concede o el
+/// GPS no responde a tiempo (la pantalla sigue con la ubicación por defecto).
+Future<Position?> currentPosition({Duration timeout = const Duration(seconds: 8)}) async {
+  try {
+    if (!await Geolocator.isLocationServiceEnabled().timeout(timeout)) return null;
+    var permission = await Geolocator.checkPermission().timeout(timeout);
+    if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
+    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return null;
+    return await Geolocator.getCurrentPosition(
+      locationSettings: LocationSettings(accuracy: LocationAccuracy.high, timeLimit: timeout),
+    ).timeout(timeout + const Duration(seconds: 2));
+  } catch (_) {
+    return null;
+  }
 }
 
 /// BOTÓN DE PÁNICO: confirma, envía la alerta con la ubicación y ofrece llamar al 911.

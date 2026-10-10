@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -10,7 +11,8 @@ import '../core/validators.dart';
 import '../widgets/common.dart';
 import 'location_service.dart';
 
-/// Viaje del conductor: llegar, validar el PIN del pasajero, iniciar y finalizar.
+/// Servicio en curso del conductor (viaje, envío o delivery):
+/// llegar, recoger (PIN / foto / pedido listo), entregar (PIN de entrega / foto) y cobrar.
 class DriverTripScreen extends StatefulWidget {
   const DriverTripScreen({super.key, required this.initial, required this.location});
 
@@ -29,6 +31,8 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
 
   String get _id => _trip['id'] as String;
   String get _status => _trip['status'] as String;
+  String get _service => (_trip['service'] as String?) ?? 'ride';
+  Map get _photos => (_trip['photos'] as Map?) ?? const {};
 
   @override
   void dispose() {
@@ -40,6 +44,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
     setState(() => _busy = true);
     try {
       final res = Map<String, dynamic>.from(await Services.of(context).api.post('/api/trips/$_id/$path', body) as Map);
+      _pin.clear();
       setState(() {
         _trip = res;
         if (path == 'complete') _summary = res;
@@ -51,11 +56,27 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
     }
   }
 
+  Future<void> _photo(String stage) async {
+    final file = await ImagePicker().pickImage(source: ImageSource.camera, maxWidth: 1600, maxHeight: 1600, imageQuality: 80);
+    if (file == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final api = Services.of(context).api;
+      await api.upload('PUT', '/api/trips/$_id/photos/$stage', fields: {}, fileField: 'file', bytes: await file.readAsBytes());
+      final t = await api.get('/api/trips/$_id');
+      if (mounted) setState(() => _trip = Map<String, dynamic>.from(t as Map));
+    } catch (e) {
+      if (mounted) showMessage(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _cancel() async {
     final reason = await showDialog<String>(
       context: context,
       builder: (c) => SimpleDialog(title: const Text('Motivo de cancelación'), children: [
-        for (final r in ['El pasajero no llegó', 'Problema con la moto', 'Dirección peligrosa', 'Otro'])
+        for (final r in ['El cliente no llegó', 'Problema con la moto', 'Dirección peligrosa', 'Paquete sospechoso', 'Otro'])
           SimpleDialogOption(onPressed: () => Navigator.pop(c, r), child: Text(r)),
       ]),
     );
@@ -82,9 +103,14 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
     final dropoff = LatLng((dest['lat'] as num).toDouble(), (dest['lng'] as num).toDouble());
     final passenger = _trip['passenger'] as Map?;
     final target = _status == 'in_progress' ? dropoff : pickup;
+    final title = switch (_service) {
+      'parcel' => 'Envío',
+      'food' => 'Delivery · ${(_trip['order'] as Map?)?['merchantName'] ?? ''}',
+      _ => passenger?['firstName'] != null ? 'Pasajero: ${passenger!['firstName']}' : 'Viaje',
+    };
 
     return Scaffold(
-      appBar: AppBar(title: Text(passenger?['firstName'] != null ? 'Pasajero: ${passenger!['firstName']}' : 'Viaje')),
+      appBar: AppBar(title: Text(title)),
       floatingActionButton: _status == 'completed' || _status == 'cancelled' ? null : SosButton(tripId: _id),
       floatingActionButtonLocation: FloatingActionButtonLocation.endTop,
       body: Column(children: [
@@ -96,7 +122,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
               children: [
                 baseTiles(),
                 MarkerLayer(markers: [
-                  pin(pickup, Icons.trip_origin, Colors.green),
+                  pin(pickup, _service == 'food' ? Icons.storefront : Icons.trip_origin, Colors.green),
                   pin(dropoff, Icons.location_on, Colors.red),
                   if (here != null) pin(here, Icons.two_wheeler, Colors.black, size: 36),
                 ]),
@@ -107,66 +133,132 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
         ),
         SafeArea(
           top: false,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: _controls(target)),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.55),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: _controls(target)),
+            ),
           ),
         ),
       ]),
     );
   }
 
+  Widget _pinField(String label) => TextField(
+        controller: _pin,
+        keyboardType: TextInputType.number,
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontSize: 28, letterSpacing: 8),
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
+        decoration: InputDecoration(labelText: label),
+      );
+
+  Widget _photoButton(String stage, String label) {
+    final done = _photos[stage] == true;
+    return OutlinedButton.icon(
+      onPressed: _busy ? null : () => _photo(stage),
+      icon: Icon(done ? Icons.check_circle : Icons.photo_camera, color: done ? Colors.green : null),
+      label: Text(done ? '$label (tomada, repetir)' : label),
+    );
+  }
+
+  List<Widget> _details() {
+    final parcel = _trip['parcel'] as Map?;
+    final order = _trip['order'] as Map?;
+    return [
+      if (parcel != null) ...[
+        Text('Paquete: ${parcel['description']} · ${parcel['size']} · ${parcel['weightKg']} kg'),
+        Text('Para: ${parcel['recipientName']} · ${parcel['recipientPhone']}'),
+        if (_status == 'in_progress')
+          TextButton.icon(
+            onPressed: () => launchUrl(Uri.parse('tel:${parcel['recipientPhone']}')),
+            icon: const Icon(Icons.call),
+            label: const Text('Llamar a quien recibe'),
+          ),
+      ],
+      if (order != null) ...[
+        Text('Pedido #${order['code']} · ${(order['items'] as List).length} productos'),
+        for (final i in (order['items'] as List)) Text('  ${i['qty']} × ${i['name']}${i['note'] != null ? ' (${i['note']})' : ''}'),
+      ],
+    ];
+  }
+
   List<Widget> _controls(LatLng target) {
     final fare = formatCents(_trip['fareCents'] as int);
+    final collect = formatCents((_trip['collectCents'] ?? _trip['fareCents']) as int);
+    final collectAtPickup = _trip['collectAt'] == 'pickup';
     switch (_status) {
       case 'accepted':
         return [
-          Text('Ve a recoger al pasajero · Tarifa $fare', textAlign: TextAlign.center),
+          Text(
+            switch (_service) {
+              'parcel' => 'Ve a recoger el paquete · Ganas $fare',
+              'food' => 'Ve al local · Lleva ${formatCents(_trip['payMerchantCents'] as int)} para pagar el pedido',
+              _ => 'Ve a recoger al pasajero · Tarifa $fare',
+            },
+            textAlign: TextAlign.center,
+          ),
+          ..._details(),
           const SizedBox(height: 8),
           OutlinedButton.icon(onPressed: () => _navigate(target), icon: const Icon(Icons.navigation), label: const Text('Navegar')),
-          FilledButton(onPressed: _busy ? null : () => _action('arrived'), child: const Text('Llegué al punto de recogida')),
-          TextButton(onPressed: _cancel, child: const Text('Cancelar viaje')),
+          FilledButton(onPressed: _busy ? null : () => _action('arrived'), child: const Text('Llegué')),
+          TextButton(onPressed: _cancel, child: const Text('Cancelar')),
         ];
       case 'arrived':
         return [
-          const Text('Pide al pasajero el PIN de 4 dígitos que aparece en su app.', textAlign: TextAlign.center),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _pin,
-            keyboardType: TextInputType.number,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 28, letterSpacing: 8),
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
-            decoration: const InputDecoration(labelText: 'PIN del pasajero'),
-          ),
-          const SizedBox(height: 8),
-          FilledButton(
-            onPressed: _busy ? null : () => _action('start', {'pin': _pin.text}),
-            child: const Text('Iniciar viaje'),
-          ),
-          TextButton(onPressed: _cancel, child: const Text('Cancelar viaje')),
+          ..._details(),
+          if (_service == 'food') ...[
+            Text('Paga ${formatCents(_trip['payMerchantCents'] as int)} al local y verifica los productos.', textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            const Text('El local debe marcar el pedido como listo en su panel.', textAlign: TextAlign.center),
+            FilledButton(onPressed: _busy ? null : () => _action('start'), child: const Text('Recogí el pedido')),
+          ] else ...[
+            if (_service == 'parcel') ...[
+              const Text('Revisa el paquete y toma una foto antes de recogerlo.', textAlign: TextAlign.center),
+              _photoButton('pickup', 'Foto del paquete'),
+              if (collectAtPickup) Text('Cobra $collect al remitente.', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
+            ],
+            Text(_service == 'parcel' ? 'Pide al remitente el PIN de su app.' : 'Pide al pasajero el PIN de 4 dígitos de su app.', textAlign: TextAlign.center),
+            _pinField(_service == 'parcel' ? 'PIN del remitente' : 'PIN del pasajero'),
+            FilledButton(
+              onPressed: _busy ? null : () => _action('start', {'pin': _pin.text}),
+              child: Text(_service == 'parcel' ? 'Recogí el paquete' : 'Iniciar viaje'),
+            ),
+          ],
+          TextButton(onPressed: _cancel, child: const Text('Cancelar')),
         ];
       case 'in_progress':
+        if (_service == 'ride') {
+          return [
+            Text('Rumbo al destino · Cobra $fare en efectivo', textAlign: TextAlign.center),
+            OutlinedButton.icon(onPressed: () => _navigate(target), icon: const Icon(Icons.navigation), label: const Text('Navegar')),
+            FilledButton(onPressed: _busy ? null : () => _action('complete'), child: const Text('Finalizar viaje')),
+          ];
+        }
         return [
-          Text('Rumbo al destino · Cobra $fare en efectivo', textAlign: TextAlign.center),
-          const SizedBox(height: 8),
+          ..._details(),
           OutlinedButton.icon(onPressed: () => _navigate(target), icon: const Icon(Icons.navigation), label: const Text('Navegar')),
-          FilledButton(onPressed: _busy ? null : () => _action('complete'), child: const Text('Finalizar viaje')),
+          if (!collectAtPickup) Text('Cobra $collect en efectivo al entregar', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
+          if (_service == 'parcel') _photoButton('dropoff', 'Foto de la entrega'),
+          Text(_service == 'parcel' ? 'Pide a quien recibe el PIN que le llegó por SMS.' : 'Pide al cliente el PIN de entrega de su app.',
+              textAlign: TextAlign.center),
+          _pinField('PIN de entrega'),
+          FilledButton(onPressed: _busy ? null : () => _action('complete', {'pin': _pin.text}), child: const Text('Entregado')),
         ];
       case 'completed':
         final s = _summary;
         return [
-          Text('Viaje finalizado. Cobra $fare en efectivo.', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
+          Text(_service == 'ride' ? 'Viaje finalizado.' : 'Entrega completada.', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
           if (s != null && s['commissionCents'] != null)
             Text('Comisión descontada de tu billetera: ${formatCents(s['commissionCents'] as int)}', textAlign: TextAlign.center),
-          if (s != null && s['balanceCents'] != null)
-            Text('Saldo actual: ${formatCents(s['balanceCents'] as int)}', textAlign: TextAlign.center),
+          if (s != null && s['balanceCents'] != null) Text('Saldo actual: ${formatCents(s['balanceCents'] as int)}', textAlign: TextAlign.center),
           const SizedBox(height: 12),
           FilledButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Listo')),
         ];
       default:
         return [
-          const Text('Este viaje ya no está activo.', textAlign: TextAlign.center),
+          const Text('Este servicio ya no está activo.', textAlign: TextAlign.center),
           FilledButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Volver')),
         ];
     }
