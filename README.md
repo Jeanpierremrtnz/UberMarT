@@ -1,6 +1,6 @@
 # UberMarT
 
-Plataforma de transporte en moto para Manta (Ecuador): app del pasajero, app del
+Plataforma de transporte en moto: app del pasajero, app del
 conductor, API en tiempo real y panel administrativo. Diseñada con la seguridad
 de conductores y pasajeros como prioridad.
 
