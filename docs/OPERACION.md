@@ -64,6 +64,45 @@ antecedentes penales en el portal oficial. Aprobar crea su billetera. Rechazar o
 suspender exige un motivo (el conductor lo ve). Las anomalías de GPS (fake GPS o
 saltos imposibles) se muestran en su ficha.
 
+## Restaurantes y locales (pestaña Comercios)
+Los locales se registran solos en `https://api.tudominio.ec/comercio/#registro`:
+verifican su celular por SMS, ingresan RUC, dirección y ubicación, crean su cuenta
+(correo, contraseña y app autenticadora), suben 4 documentos (certificado RUC,
+permiso de funcionamiento, cédula del dueño y foto de la fachada) y cargan sus
+productos con foto. Luego envían a revisión.
+
+En **Comercios → Pendientes de revisión**:
+1. Verifica el RUC en el portal del SRI y que el dueño coincida con la cédula.
+2. Revisa que el permiso de funcionamiento esté vigente y que la fachada corresponda a la dirección.
+3. Ajusta la comisión (% sobre el valor de los productos) y pulsa **Aprobar**. Recién ahí el
+   local aparece en la app y puede abrir.
+4. Para cobrar comisiones: el local ve en *Cuenta* lo que debe; cuando te transfiera,
+   registra el pago en su ficha (rol finance u owner).
+
+Un local aprobado no puede cambiar nombre, categoría ni ubicación por su cuenta (evita
+fraudes); horario y tiempo de preparación sí.
+
+## Delivery de comida (cómo funciona)
+1. El cliente elige un local abierto, arma su carrito y confirma. Los precios siempre
+   salen de la base de datos, no de la app.
+2. El local recibe el pedido con sonido en `/comercio` y lo **acepta** indicando el tiempo de
+   preparación (o lo rechaza). Si no responde en 8 minutos, se rechaza solo.
+3. La moto se busca automáticamente cuando faltan ~8 minutos para que el pedido esté listo.
+4. El local marca **Pedido listo**. El motorizado (placa visible en el panel del local)
+   **paga la comida al local en efectivo** y la retira.
+5. Al entregar, cobra el total al cliente y le pide su **PIN de entrega**.
+6. Si en 20 minutos no aparece moto, el pedido se cancela y el panel interno recibe una alerta.
+
+Protección del motorizado: máximo $40 por pedido y $20 en el primer pedido de cada
+cliente (configurable en `services.food`).
+
+## Mensajería (encomiendas)
+El cliente marca dónde recoger y entregar, llena los datos del paquete (destinatario,
+contenido, tamaño, peso, valor declarado, quién paga) y declara que no lleva artículos
+prohibidos. El motorizado debe tomar foto del paquete y recibir el PIN del remitente
+para recogerlo; al recogerlo, el destinatario recibe un SMS con el seguimiento y su PIN.
+Para entregar, el motorizado toma otra foto y pide ese PIN. Máximo 10 kg (configurable).
+
 ## Alertas SOS (pestaña SOS)
 Suena una alerta y el título de la pestaña cambia. Llama al usuario, abre su
 ubicación y, si corresponde, coordina con el ECU 911. Marca "Atendiendo" y luego
@@ -82,8 +121,8 @@ ubicación y, si corresponde, coordina con el ECU 911. Marca "Atendiendo" y lueg
 | Rol | Puede |
 |-----|-------|
 | `owner` | Todo, incluidas tarifas y zonas |
-| `finance` | Recargas, conciliación bancaria, integridad de billeteras |
-| `operations` | Conductores, usuarios, alertas SOS |
+| `finance` | Recargas, conciliación bancaria, integridad de billeteras, pagos de comercios |
+| `operations` | Conductores, comercios, usuarios, alertas SOS |
 
 Crear usuarios del panel (en el servidor):
 `docker compose exec api node scripts/create-admin.js correo@dominio.com "Nombre" finance`

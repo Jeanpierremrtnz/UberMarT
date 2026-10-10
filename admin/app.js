@@ -434,9 +434,10 @@ bindSettingsForm($('#pricing-form'), 'pricing', PRICING_FIELDS);
 bindSettingsForm($('#wallet-form'), 'wallet', WALLET_FIELDS);
 
 async function loadPricing() {
-  const [pricing, wallet, accounts, snap] = await Promise.all([
-    api('/settings/pricing'), api('/settings/wallet'), api('/settings/topupAccounts'), api('/pricing/snapshot'),
+  const [pricing, wallet, accounts, snap, servicesCfg] = await Promise.all([
+    api('/settings/pricing'), api('/settings/wallet'), api('/settings/topupAccounts'), api('/pricing/snapshot'), api('/settings/services'),
   ]);
+  $('#services-json').value = JSON.stringify(servicesCfg, null, 2);
   fillFields($('#pricing-fields'), PRICING_FIELDS, pricing);
   fillFields($('#wallet-fields'), WALLET_FIELDS, wallet);
   $('#accounts-json').value = JSON.stringify(accounts.length ? accounts : [
@@ -457,6 +458,17 @@ for (const b of document.querySelectorAll('[data-weather]')) {
     loadPricing();
   });
 }
+
+$('#services-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const out = e.target.querySelector('[data-result]');
+  try {
+    await api('/settings/services', { method: 'PUT', body: JSON.parse($('#services-json').value) });
+    out.textContent = 'Guardado ✓';
+  } catch (err) {
+    out.textContent = err.message;
+  }
+});
 
 $('#accounts-form').addEventListener('submit', async (e) => {
   e.preventDefault();

@@ -61,6 +61,20 @@ resume las amenazas consideradas y los controles implementados.
 - GPS simulado (apps de "fake GPS") y saltos imposibles se descartan y se registran.
 - Los pasajeros no pueden ver la ubicación de motos no asignadas.
 
+## 4.1 Mensajería y delivery
+
+| Amenaza | Control |
+|---------|---------|
+| Envío de artículos ilícitos | Declaración obligatoria, descripción del contenido, foto del paquete antes de recogerlo, el motorizado puede cancelar por "paquete sospechoso" |
+| "Nunca me llegó" / entrega falsa | El envío solo se completa con el PIN que recibe el destinatario (SMS) o el cliente (app), más foto de entrega en mensajería; 5 intentos máximo |
+| Paquete entregado a la persona equivocada | Recogida con PIN del remitente; entrega con PIN del destinatario |
+| Pedidos falsos que hacen perder dinero al motorizado | Clientes con cédula verificada, tope por pedido ($40) y menor para el primer pedido ($20), el local debe aceptar el pedido |
+| Precios manipulados desde la app | El carrito se cotiza con precios de la base de datos y queda sellado en la cotización |
+| Local falso o suplantado | Registro con celular verificado por SMS, RUC único y validado, cédula del dueño cifrada, documentos revisados por el panel antes de publicar |
+| Un local ve datos de otro | Todas las consultas filtradas por el local de la sesión; el local solo ve el primer nombre del cliente |
+| Cuenta de local usada en el panel interno | Sesiones separadas por ámbito: una cuenta de local nunca abre el panel interno y viceversa |
+| Comisiones alteradas | Libro de cada local de solo-anexar (triggers + permisos de BD) |
+
 ## 5. Panel administrativo
 
 - Contraseña con Argon2id (64 MB) + **TOTP obligatorio** (Google Authenticator/Authy)
@@ -68,8 +82,11 @@ resume las amenazas consideradas y los controles implementados.
 - Bloqueo de 15 min tras 5 intentos fallidos; mismo mensaje para correos inexistentes.
 - Sesión en cookie `__Host-` HttpOnly, Secure, SameSite=Strict; 30 min de inactividad, 8 h máximo.
 - Token CSRF obligatorio en toda escritura.
-- Roles: `owner` (todo), `finance` (recargas y conciliación), `operations` (conductores,
-  usuarios y SOS). Solo `owner` cambia tarifas y zonas.
+- Roles: `owner` (todo), `finance` (recargas, conciliación y pagos de comercios), `operations`
+  (conductores, comercios, usuarios y SOS). Solo `owner` cambia tarifas y zonas.
+- El panel de comercios (`/comercio`) usa la misma seguridad (contraseña Argon2id + TOTP,
+  cookie `__Host-` y CSRF) con sesiones más largas para la tablet del local; no está
+  restringido por IP para que los locales puedan entrar desde su negocio.
 - Ver datos personales completos de un conductor queda en la auditoría.
 - Caddy puede restringir el panel a las IP de tu oficina o VPN (`ADMIN_ALLOWED_IPS`).
 

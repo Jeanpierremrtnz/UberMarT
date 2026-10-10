@@ -1,16 +1,20 @@
 # UberMarT
 
-Plataforma de transporte en moto para Manta (Ecuador): app del pasajero, app del
-conductor, API en tiempo real y panel administrativo. Diseñada con la seguridad
-de conductores y pasajeros como prioridad.
+Plataforma de servicios en moto para Manta (Ecuador): **viajes**, **mensajería
+(encomiendas)** y **delivery de comida**. Incluye la app del cliente, la app del
+conductor, el panel web para restaurantes y locales, la API en tiempo real y el
+panel administrativo. Diseñada con la seguridad de conductores, clientes y
+comercios como prioridad.
 
 ## Estructura
 
 | Carpeta    | Contenido |
 |------------|-----------|
 | `backend/` | API Node.js + Express, tiempo real con Socket.io, PostgreSQL + PostGIS |
-| `admin/`   | Panel web interno (aprobación de recargas, conductores, SOS, tarifas) |
-| `mobile/`  | Apps Flutter (pasajero y conductor desde un mismo código) |
+| `admin/`   | Panel web interno (recargas, conductores, comercios, SOS, tarifas) |
+| `comercio/`| Panel web para restaurantes y locales (registro, productos, pedidos) |
+| `public/`  | Estilos e íconos compartidos de las páginas web |
+| `mobile/`  | Apps Flutter (cliente y conductor desde un mismo código) |
 | `infra/`   | Docker Compose, Caddy (HTTPS), OSRM, roles de BD y respaldos |
 | `docs/`    | Arquitectura, seguridad, operación, despliegue y API |
 
@@ -29,6 +33,13 @@ de conductores y pasajeros como prioridad.
   hora pico (L-V 07:15-08:15) y recargo por lluvia (OpenWeather o manual).
 - **Seguridad en el viaje**: PIN de abordaje, botón SOS con SMS a contactos de emergencia,
   link de seguimiento en vivo que expira, recorrido guardado para investigaciones.
+- **Mensajería**: datos del paquete y declaración de artículos prohibidos, foto al recoger
+  y al entregar, y el destinatario recibe por SMS el seguimiento y un PIN sin el cual no
+  se puede marcar como entregado.
+- **Delivery de comida**: los restaurantes se registran solos (SMS, RUC, autenticador,
+  documentos), cargan productos con foto y reciben pedidos en vivo en `/comercio`. El
+  panel interno los aprueba antes de publicarlos. Precios siempre desde el servidor,
+  límite de monto por pedido para proteger al motorizado y PIN de entrega del cliente.
 - **Billetera del conductor** con libro contable inmutable y comisión automática por viaje.
 
 ## Inicio rápido (desarrollo)
@@ -43,7 +54,7 @@ cp .env.example .env         # ajusta DATABASE_URL, NODE_ENV=development, COOKIE
                              # SMS_PROVIDER=console, PUBLIC_BASE_URL=http://localhost:3000
 DATABASE_URL=postgres://... npm run migrate
 npm run admin:create -- tu@correo.com "Tu Nombre" owner
-npm run dev                  # API en http://localhost:3000, panel en /admin/
+npm run dev                  # API en http://localhost:3000, paneles en /admin/ y /comercio/
 npm test                     # pruebas unitarias e integración (requiere BD de pruebas)
 ```
 

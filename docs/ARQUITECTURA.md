@@ -3,7 +3,7 @@
 ## Vista general
 
 ```
- App pasajero (Flutter)        App conductor (Flutter)          Panel admin (web)
+ App cliente (Flutter)         App conductor (Flutter)     Panel admin y panel /comercio (web)
         │  HTTPS (REST)  ▲ WebSocket      │ HTTPS ▲ WebSocket        │ HTTPS + cookie
         │                │ eventos        │       │ GPS + ofertas    │ SSE (alertas)
         ▼                │                ▼       │                  ▼
@@ -19,6 +19,21 @@
 
 Todo corre en un solo servidor con Docker Compose (DigitalOcean de 2-4 GB). Solo
 Caddy expone puertos; la base de datos y OSRM viven en una red interna sin salida.
+
+## Servicios
+
+Los tres servicios comparten el mismo motor (cotización, despacho por cercanía, GPS
+en vivo, SOS, comisión del conductor). Cada viaje tiene un `service`:
+
+| Servicio | Recogida | Entrega | Cobro en efectivo |
+|----------|----------|---------|-------------------|
+| `ride` (viaje) | PIN del pasajero | — | Al llegar |
+| `parcel` (mensajería) | Foto + PIN del remitente | Foto + PIN del destinatario (SMS) | Al recoger o al entregar, según quién paga |
+| `food` (delivery) | El local marca "listo"; el motorizado le paga la comida | PIN del cliente | Total (comida + envío) al entregar |
+
+Delivery agrega locales (`merchants`), productos (`menu_items`), pedidos (`orders`) y la
+cuenta de comisiones de cada local (`merchant_ledger`, solo-anexar). El pedido nace de
+una cotización que congela el carrito con precios de la base de datos.
 
 ## Componentes
 
@@ -36,9 +51,10 @@ Caddy expone puertos; la base de datos y OSRM viven en una red interna sin salid
 - **Precio fijo por adelantado**: la cotización se guarda en el servidor (5 min) y el
   viaje se crea a partir de ella. El cliente nunca envía el precio.
 
-### Panel administrativo (`admin/`)
+### Paneles web (`admin/` y `comercio/`)
 HTML + JavaScript sin dependencias ni CDN (Content-Security-Policy `'self'`). Las
-alertas en vivo llegan por Server-Sent Events (nativo del navegador).
+alertas y los pedidos en vivo llegan por Server-Sent Events (nativo del navegador).
+El panel interno puede restringirse por IP; el de comercios es público para los locales.
 
 ### Apps móviles (`mobile/`)
 Un solo proyecto Flutter con dos puntos de entrada y dos *flavors* de Android

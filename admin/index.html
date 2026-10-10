@@ -160,6 +160,14 @@
           <thead><tr><th>Zona</th><th>Solicitudes</th><th>Motos libres</th><th>Multiplicador</th><th>Tope</th></tr></thead>
           <tbody id="zones-body"></tbody>
         </table>
+        <h3>Mensajería y delivery (tarifas y reglas)</h3>
+        <form id="services-form" class="card">
+          <p class="muted">Valores en centavos. parcel = mensajería (peso máx., valor declarado máx.); food = delivery
+            (radio de entrega, tope por pedido, tope primer pedido, minutos para que el local responda, anticipación del despacho).</p>
+          <textarea id="services-json" rows="14" spellcheck="false"></textarea>
+          <button class="btn primary small" type="submit">Guardar</button>
+          <span class="muted" data-result></span>
+        </form>
         <h3>Cuentas para transferencias (se muestran en la app del conductor)</h3>
         <form id="accounts-form" class="card">
           <textarea id="accounts-json" rows="7" spellcheck="false"></textarea>

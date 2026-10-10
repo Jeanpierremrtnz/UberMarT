@@ -24,13 +24,20 @@
 - Panel: mapa en vivo de motos y editor visual de geocercas.
 - Retención automática de datos (p. ej. recorridos 90 días) según la política de privacidad.
 
-## Fase 2 — Mensajería (encomiendas)
-Reutiliza conductores, billetera, despacho y seguimiento. Nuevo tipo de viaje con
-datos del destinatario, foto de entrega y PIN de entrega.
+## Fase 2 — Mensajería (implementada)
+Mismo motor de despacho: datos del paquete, foto al recoger y al entregar, PIN del
+remitente al recoger y PIN del destinatario (por SMS) al entregar.
 
-## Fase 3 — Delivery de comida
-Tercera interfaz (web) para restaurantes: menú, pedidos y estados de preparación;
-el despacho de la moto reutiliza el motor actual.
+## Fase 3 — Delivery de comida (implementada)
+Panel web `/comercio` para que los restaurantes se registren, carguen productos y
+reciban pedidos; el panel interno los verifica. El motorizado paga la comida al
+local y cobra el total al cliente, que confirma con su PIN de entrega.
+
+### Mejoras sugeridas para delivery
+- Pago en línea del cliente con Payphone (hoy es efectivo contra entrega).
+- Cuentas adicionales para el personal del local (hoy una cuenta por local).
+- Horario automático de apertura/cierre y "agotado" por horario.
+- Combinar pedidos del mismo local en una sola moto.
 
 ## Crecimiento técnico
 - Varias instancias de la API: Redis para Socket.io y límites de solicitudes.
