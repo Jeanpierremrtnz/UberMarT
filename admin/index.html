@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>UberMarT · Panel</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="app.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <section id="login-view" class="login" hidden>
+    <form id="login-form" class="login-card" autocomplete="on">
+      <h1>UberMarT <span>Panel</span></h1>
+      <label>Correo <input name="email" type="email" required autocomplete="username"></label>
+      <label>Contraseña <input name="password" type="password" required autocomplete="current-password"></label>
+      <label>Código de autenticador (6 dígitos)
+        <input name="totp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code">
+      </label>
+      <button type="submit" class="btn primary">Ingresar</button>
+      <p id="login-error" class="error" role="alert"></p>
+    </form>
+  </section>
+
+  <div id="app-view" hidden>
+    <header class="topbar">
+      <strong>UberMarT</strong>
+      <nav id="tabs">
+        <button data-tab="topups" class="tab">Recargas <span id="badge-topups" class="badge"></span></button>
+        <button data-tab="drivers" class="tab">Conductores <span id="badge-drivers" class="badge"></span></button>
+        <button data-tab="sos" class="tab">SOS <span id="badge-sos" class="badge danger"></span></button>
+        <button data-tab="pricing" class="tab">Tarifas</button>
+      </nav>
+      <span id="who" class="muted"></span>
+      <button id="logout" class="btn small">Salir</button>
+    </header>
+
+    <main>
+      <section id="tab-topups" class="tab-panel">
+        <div class="toolbar">
+          <h2>Recargas pendientes <span id="queue-count" class="muted"></span></h2>
+          <details class="import">
+            <summary class="btn small">Importar estado de cuenta (CSV)</summary>
+            <form id="bank-form">
+              <p class="muted">Exporta los movimientos desde tu banca empresarial. Las recargas cuya referencia y monto
+                coincidan se marcarán como <strong>confirmadas en banco</strong>.</p>
+              <input type="file" name="file" accept=".csv,text/csv" required>
+              <button class="btn small primary" type="submit">Importar</button>
+              <span id="bank-result" class="muted"></span>
+            </form>
+          </details>
+        </div>
+        <div id="topup-empty" class="empty" hidden>No hay recargas pendientes. 🎉</div>
+        <div id="topup-review" class="review" hidden>
+          <figure class="receipt">
+            <img id="receipt-img" alt="Comprobante de la transferencia">
+            <figcaption class="muted">Clic en la imagen para ampliar</figcaption>
+          </figure>
+          <aside class="facts">
+            <div id="bank-flag" class="flag"></div>
+            <dl>
+              <dt>Monto declarado</dt><dd id="f-amount" class="amount"></dd>
+              <dt>Referencia / secuencial</dt><dd id="f-reference" class="mono big"></dd>
+              <dt>Banco / billetera</dt><dd id="f-bank"></dd>
+              <dt>Conductor</dt><dd id="f-driver"></dd>
+              <dt>Placa</dt><dd id="f-plate" class="mono"></dd>
+              <dt>Enviado</dt><dd id="f-date"></dd>
+              <dt>Historial</dt><dd id="f-history"></dd>
+            </dl>
+            <p class="checklist muted">Verifica: el monto y la referencia de la imagen coinciden con lo digitado, la
+              cuenta destino es la de UberMarT y el dinero aparece en tu banca.</p>
+            <button id="btn-approve" class="btn approve">Aprobar <kbd>A</kbd></button>
+            <button id="btn-reject" class="btn reject">Rechazar <kbd>R</kbd></button>
+            <div id="reject-box" class="reject-box" hidden>
+              <p>Motivo (tecla 1-6):</p>
+              <div id="reject-reasons" class="reasons"></div>
+              <input id="reject-note" maxlength="300" placeholder="Nota opcional para el conductor">
+            </div>
+            <p id="topup-msg" class="error" role="alert"></p>
+          </aside>
+        </div>
+      </section>
+
+      <section id="tab-drivers" class="tab-panel" hidden>
+        <div class="toolbar">
+          <h2>Conductores</h2>
+          <select id="driver-status">
+            <option value="submitted">Pendientes de revisión</option>
+            <option value="approved">Aprobados</option>
+            <option value="rejected">Rechazados</option>
+            <option value="suspended">Suspendidos</option>
+          </select>
+        </div>
+        <div class="split">
+          <ul id="driver-list" class="list"></ul>
+          <div id="driver-detail" class="detail"><p class="muted">Selecciona un conductor.</p></div>
+        </div>
+      </section>
+
+      <section id="tab-sos" class="tab-panel" hidden>
+        <div class="toolbar"><h2>Alertas de seguridad</h2>
+          <select id="sos-status">
+            <option value="open">Abiertas</option>
+            <option value="acknowledged">En atención</option>
+            <option value="resolved">Resueltas</option>
+          </select>
+        </div>
+        <ul id="sos-list" class="list wide"></ul>
+      </section>
+
+      <section id="tab-pricing" class="tab-panel" hidden>
+        <h2>Tarifas dinámicas</h2>
+        <div class="grid2">
+          <form id="pricing-form" class="card">
+            <h3>Fórmula base</h3>
+            <p class="muted">Tarifa = máx(Mínima, (Base + Km × costo + Min × costo) × Multiplicador) + Lluvia</p>
+            <div id="pricing-fields" class="fields"></div>
+            <button class="btn primary small" type="submit">Guardar tarifas</button>
+            <span class="muted" data-result></span>
+          </form>
+          <div class="card">
+            <h3>Clima (recargo por lluvia)</h3>
+            <p id="weather-now" class="muted"></p>
+            <div class="row">
+              <button class="btn small" data-weather="auto">Automático (OpenWeather)</button>
+              <button class="btn small" data-weather="force_rain">Forzar lluvia</button>
+              <button class="btn small" data-weather="force_dry">Forzar sin lluvia</button>
+            </div>
+            <h3>Regla horaria activa</h3>
+            <p id="time-rule-now" class="muted"></p>
+            <h3>Billetera y comisiones</h3>
+            <form id="wallet-form">
+              <div id="wallet-fields" class="fields"></div>
+              <button class="btn primary small" type="submit">Guardar</button>
+              <span class="muted" data-result></span>
+            </form>
+          </div>
+        </div>
+        <h3>Zonas (geocercas) y multiplicador actual</h3>
+        <table class="table">
+          <thead><tr><th>Zona</th><th>Solicitudes</th><th>Motos libres</th><th>Multiplicador</th><th>Tope</th></tr></thead>
+          <tbody id="zones-body"></tbody>
+        </table>
+        <h3>Cuentas para transferencias (se muestran en la app del conductor)</h3>
+        <form id="accounts-form" class="card">
+          <textarea id="accounts-json" rows="7" spellcheck="false"></textarea>
+          <button class="btn primary small" type="submit">Guardar cuentas</button>
+          <span class="muted" data-result></span>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="zoom"><img id="zoom-img" alt="Comprobante ampliado"><form method="dialog"><button class="btn small">Cerrar</button></form></dialog>
+</body>
+</html>
