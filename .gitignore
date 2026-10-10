@@ -1,0 +1,29 @@
+# Dependencias y compilados
+node_modules/
+build/
+.dart_tool/
+
+# Secretos: nunca al repositorio
+.env
+.env.*
+!.env.example
+*.env
+!*.env.example
+*.pem
+*.key
+*.jks
+*.keystore
+key.properties
+
+# Datos locales
+storage/
+storage-*/
+infra/osrm/data/
+*.dump
+*.gpg
+
+# Sistema / editores
+.DS_Store
+.idea/
+.vscode/
+*.log

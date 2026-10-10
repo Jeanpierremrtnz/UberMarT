@@ -1,0 +1,41 @@
+{
+	email {$ACME_EMAIL}
+	servers {
+		timeouts {
+			read_header 10s
+			idle 2m
+		}
+	}
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	# El panel solo responde desde las IP permitidas (tu oficina / VPN).
+	# Define ADMIN_ALLOWED_IPS en infra/.env, ej: "190.152.10.20/32 2800:bf0::/32"
+	@adminBlocked {
+		path /admin /admin/* /api/admin/*
+		not remote_ip {$ADMIN_ALLOWED_IPS}
+	}
+	respond @adminBlocked 404
+
+	request_body {
+		max_size 10MB
+	}
+
+	reverse_proxy api:3000 {
+		health_uri /healthz
+		health_interval 15s
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
