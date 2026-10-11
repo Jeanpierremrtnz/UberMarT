@@ -258,7 +258,7 @@ class _QuoteView extends StatelessWidget {
       Text(
         quote['driversNearby'] == 0
             ? 'No hay motos cerca ahora, igual buscaremos por ti.'
-            : '${quote['driversNearby']} motos cerca${eta != null ? ' · la más cercana a ~$eta min' : ''}',
+            : '${quote['driversNearby']} ${quote['driversNearby'] == 1 ? 'moto' : 'motos'} cerca${eta != null ? ' · la más cercana a ~$eta min' : ''}',
         textAlign: TextAlign.center,
       ),
       const SizedBox(height: 12),

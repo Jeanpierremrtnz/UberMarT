@@ -77,15 +77,16 @@ class SosButton extends StatelessWidget {
     await launchUrl(Uri.parse('tel:911'));
   }
 
+  /// Se muestra en la barra superior para que siempre esté visible sin tapar controles.
   @override
   Widget build(BuildContext context) {
-    return FloatingActionButton.extended(
-      heroTag: 'sos',
-      backgroundColor: Colors.red,
-      foregroundColor: Colors.white,
-      onPressed: () => _trigger(context),
-      icon: const Icon(Icons.sos),
-      label: const Text('SOS'),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: FilledButton(
+        style: FilledButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+        onPressed: () => _trigger(context),
+        child: const Text('SOS', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+      ),
     );
   }
 }

@@ -164,6 +164,7 @@ class _DriverHomeState extends State<DriverHome> {
       appBar: AppBar(
         title: const Text('UberMarT Conductor'),
         actions: [
+          if (_status == 'approved') const SosButton(),
           IconButton(
             tooltip: 'Contactos de emergencia',
             icon: const Icon(Icons.health_and_safety),
@@ -179,7 +180,6 @@ class _DriverHomeState extends State<DriverHome> {
           ),
         ],
       ),
-      floatingActionButton: _status == 'approved' ? const SosButton() : null,
       body: _status == null ? const Center(child: CircularProgressIndicator()) : _body(),
     );
   }

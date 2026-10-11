@@ -110,9 +110,10 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
     };
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      floatingActionButton: _status == 'completed' || _status == 'cancelled' ? null : SosButton(tripId: _id),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endTop,
+      appBar: AppBar(
+        title: Text(title),
+        actions: [if (_status != 'completed' && _status != 'cancelled') SosButton(tripId: _id)],
+      ),
       body: Column(children: [
         Expanded(
           child: ValueListenableBuilder<LatLng?>(

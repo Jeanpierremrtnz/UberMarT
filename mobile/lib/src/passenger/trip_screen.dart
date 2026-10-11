@@ -172,9 +172,10 @@ class _TripScreenState extends State<TripScreen> {
     final photos = (_trip['photos'] as Map?) ?? const {};
     final pinStyle = Theme.of(context).textTheme.displaySmall?.copyWith(letterSpacing: 8, fontWeight: FontWeight.bold);
     return Scaffold(
-      appBar: AppBar(title: Text(_statusText[_service]?[_status] ?? _status)),
-      floatingActionButton: _active ? SosButton(tripId: _id) : null,
-      floatingActionButtonLocation: FloatingActionButtonLocation.endTop,
+      appBar: AppBar(
+        title: Text(_statusText[_service]?[_status] ?? _status, maxLines: 2, style: const TextStyle(fontSize: 18)),
+        actions: [if (_active) SosButton(tripId: _id)],
+      ),
       body: Column(
         children: [
           Expanded(
